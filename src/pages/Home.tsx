@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Globe,
@@ -17,8 +18,9 @@ import {
   Clock,
 } from 'lucide-react';
 import Footer from '../components/Footer';
+import { supabase } from '../lib/supabase';
 
-type Page = 'home' | 'about' | 'services' | 'products' | 'contact' | 'solutions';
+type Page = 'home' | 'about' | 'services' | 'products' | 'contact' | 'solutions' | 'feedback';
 
 interface HomeProps {
   onNavigate: (page: Page) => void;
@@ -120,32 +122,101 @@ const highlights = [
   'Professional implementation with ongoing support and optimization',
 ];
 
-const reviews = [
+type Review = {
+  id: string;
+  name: string;
+  company: string | null;
+  role: string | null;
+  rating: number;
+  message: string;
+};
+
+const fallbackReviews: Review[] = [
   {
+    id: 'fallback-operations-manager',
     name: 'Operations Manager',
     company: 'Commercial Facilities Client',
-    text: 'BinaryGuard helped us standardize security and networking across sites. The rollout was clean, organized, and far more strategic than our previous vendors.',
+    role: 'Operations Manager',
+    rating: 5,
+    message: 'BinaryGuard helped us standardize security and networking across sites. The rollout was clean, organized, and far more strategic than our previous vendors.',
   },
   {
+    id: 'fallback-it-lead',
     name: 'IT Lead',
     company: 'Hospitality Group',
-    text: 'They understood both the security side and the infrastructure side, which made the project much smoother. Communication and follow-through were excellent.',
+    role: 'IT Lead',
+    rating: 5,
+    message: 'They understood both the security side and the infrastructure side, which made the project much smoother. Communication and follow-through were excellent.',
   },
   {
+    id: 'fallback-business-director',
     name: 'Business Director',
     company: 'Multi-Location Enterprise',
-    text: 'From consultation to deployment, the team delivered a modern solution that improved visibility, support responsiveness, and operational confidence.',
+    role: 'Business Director',
+    rating: 5,
+    message: 'From consultation to deployment, the team delivered a modern solution that improved visibility, support responsiveness, and operational confidence.',
   },
 ];
 
 export default function Home({ onNavigate }: HomeProps) {
+  const [reviews, setReviews] = useState<Review[]>(fallbackReviews);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadReviews = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('client_reviews')
+          .select('id, name, company, role, rating, message')
+          .eq('approved', true)
+          .eq('featured', true)
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (error) {
+          console.error('Failed to load Supabase reviews:', error);
+          return;
+        }
+
+        if (Array.isArray(data) && data.length > 0) {
+          setReviews(
+            data.map((item) => ({
+              id: String(item.id),
+              name: String(item.name || 'Client'),
+              company: item.company ? String(item.company) : null,
+              role: item.role ? String(item.role) : null,
+              rating: Number(item.rating) || 5,
+              message: String(item.message || ''),
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('Failed to connect to Supabase reviews:', error);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    loadReviews();
+  }, []);
+
   return (
     <div className="bg-[#030d1f] min-h-screen">
       <section className="relative min-h-screen flex items-center pt-16 overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <img src="/Home.jpg" alt="BinaryGuard" className="w-full h-full object-cover object-center" />
-          <div className="absolute inset-0 bg-[#020816]/70" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#020816]/95 via-[#020816]/82 to-[#020816]/40" />
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            poster="/Home.jpg"
+            className="w-full h-full object-cover object-center"
+          >
+            <source src="/home-hero-background.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute inset-0 bg-[#020816]/60" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#020816]/95 via-[#020816]/82 to-[#020816]/45" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.12),transparent_28%)]" />
         </div>
 
@@ -363,26 +434,43 @@ export default function Home({ onNavigate }: HomeProps) {
 
       <section className="py-20 bg-[#040e22]">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="max-w-2xl mb-12">
-            <span className="text-cyan-400 text-sm font-semibold tracking-[0.22em]">CLIENT FEEDBACK</span>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Trusted by businesses that value professionalism</h2>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
+            <div className="max-w-2xl">
+              <span className="text-cyan-400 text-sm font-semibold tracking-[0.22em]">CLIENT FEEDBACK</span>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Trusted by businesses that value professionalism</h2>
+              <p className="text-gray-400 leading-8">
+                Published feedback is loaded from approved client submissions in Supabase.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('feedback')}
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-5 py-3 text-sm font-semibold text-cyan-300 hover:bg-cyan-400/15 transition-all"
+            >
+              Leave feedback <ArrowRight size={16} />
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {reviews.map((review) => (
-              <div key={review.name} className="rounded-3xl border border-white/10 bg-[#061327] p-6 hover:border-cyan-400/35 transition-all">
+              <div key={review.id} className="rounded-3xl border border-white/10 bg-[#061327] p-6 hover:border-cyan-400/35 transition-all">
                 <div className="flex gap-1 mb-5">
-                  {[...Array(5)].map((_, idx) => (
+                  {Array.from({ length: Math.max(1, Math.min(5, review.rating || 5)) }).map((_, idx) => (
                     <Star key={idx} size={14} className="text-yellow-400 fill-yellow-400" />
                   ))}
                 </div>
-                <p className="text-gray-300 text-sm leading-7 mb-6">“{review.text}”</p>
+                <p className="text-gray-300 text-sm leading-7 mb-6">“{review.message}”</p>
                 <div>
-                  <p className="text-white font-semibold">{review.name}</p>
-                  <p className="text-gray-500 text-sm mt-1">{review.company}</p>
+                  <p className="text-white font-semibold">{review.role || review.name}</p>
+                  <p className="text-gray-500 text-sm mt-1">{review.company || 'Verified Client'}</p>
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-6 text-sm text-gray-500">
+            {reviewsLoading ? 'Loading approved client feedback…' : 'Displaying approved feedback from Supabase.'}
           </div>
         </div>
       </section>
