@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Twitter, Facebook, Instagram, ChevronUp, Phone, Mail, MapPin, Clock } from 'lucide-react';
 
 type Page = 'home' | 'about' | 'services' | 'products' | 'contact' | 'solutions';
@@ -7,6 +8,20 @@ interface FooterProps {
 }
 
 export default function Footer({ onNavigate }: FooterProps) {
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const heroThreshold = window.innerHeight * 0.9;
+      setShowScrollTop(window.scrollY > heroThreshold);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   return (
@@ -98,15 +113,15 @@ export default function Footer({ onNavigate }: FooterProps) {
         </div>
       </div>
 
-      <div className="flex justify-center pb-6">
+      {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="border border-white/20 rounded-full p-2 text-white/60 hover:text-white hover:border-white/50 transition-all"
+          className="fixed left-1/2 -translate-x-1/2 bottom-6 z-50 border border-white/20 rounded-full p-3 text-white/70 bg-[#061327]/85 backdrop-blur-md shadow-lg hover:text-white hover:border-cyan-400/50 hover:bg-[#0a1830]/90 transition-all"
           aria-label="Scroll to top"
         >
           <ChevronUp size={20} />
         </button>
-      </div>
+      )}
     </footer>
   );
 }
