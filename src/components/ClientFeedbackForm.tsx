@@ -1,7 +1,14 @@
 import { FormEvent, useState } from 'react';
 import { CheckCircle2, Send } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-type FeedbackFormState = {
+type Page = 'home' | 'about' | 'services' | 'products' | 'contact' | 'solutions' | 'feedback';
+
+interface ClientFeedbackFormProps {
+  onNavigate: (page: Page) => void;
+}
+
+interface FeedbackFormState {
   name: string;
   company: string;
   role: string;
@@ -9,10 +16,7 @@ type FeedbackFormState = {
   rating: number;
   message: string;
   consent: boolean;
-};
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const REVIEWS_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/api/reviews` : '/api/reviews';
+}
 
 const initialForm: FeedbackFormState = {
   name: '',
@@ -28,23 +32,21 @@ function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error;
 
   if (error && typeof error === 'object') {
-    const maybeMessage = 'message' in error ? error.message : '';
-    const maybeDetails = 'details' in error ? error.details : '';
-    const maybeHint = 'hint' in error ? error.hint : '';
+    const message = 'message' in error ? error.message : '';
+    const details = 'details' in error ? error.details : '';
+    const hint = 'hint' in error ? error.hint : '';
 
-    const parts = [maybeMessage, maybeDetails, maybeHint].filter(
-      (part): part is string => typeof part === 'string' && part.trim().length > 0
+    const parts = [message, details, hint].filter(
+      (part) => typeof part === 'string' && part.trim().length > 0
     );
 
-    if (parts.length > 0) {
-      return parts.join(' — ');
-    }
+    if (parts.length > 0) return parts.join(' — ');
   }
 
   return 'Something went wrong while submitting your feedback. Please try again.';
 }
 
-export default function ClientFeedbackForm() {
+export default function ClientFeedbackForm({ onNavigate }: ClientFeedbackFormProps) {
   const [form, setForm] = useState<FeedbackFormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -64,32 +66,16 @@ export default function ClientFeedbackForm() {
         rating: Number(form.rating) || 5,
         message: form.message.trim(),
         consent: form.consent,
+        approved: false,
+        featured: false,
       };
 
-      if (!payload.name || !payload.message) {
-        throw new Error('Please complete your name and feedback message.');
-      }
+      if (!payload.name) throw new Error('Please enter your full name.');
+      if (!payload.message) throw new Error('Please enter your feedback message.');
+      if (!payload.consent) throw new Error('Please confirm consent before submitting.');
 
-      if (!payload.consent) {
-        throw new Error('Please confirm consent before submitting.');
-      }
-
-      const response = await fetch(REVIEWS_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error || `Failed to submit feedback (${response.status} ${response.statusText})`
-        );
-      }
+      const { error } = await supabase.from('client_reviews').insert([payload]);
+      if (error) throw error;
 
       setSubmitted(true);
       setForm(initialForm);
@@ -103,34 +89,27 @@ export default function ClientFeedbackForm() {
 
   if (submitted) {
     return (
-      <div className="rounded-[28px] border border-white/10 bg-[#061327] p-6 text-center md:p-8">
+      <div className="rounded-[28px] border border-white/10 bg-[#061327] p-8 text-center">
         <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-400/10">
           <CheckCircle2 size={30} className="text-cyan-300" />
         </div>
         <h2 className="text-2xl font-bold text-white">Thank you for your feedback</h2>
         <p className="mx-auto mt-3 max-w-xl leading-8 text-gray-300">
-          Your message has been submitted successfully. After review and approval, it can be
-          featured on the homepage client feedback section.
+          Your message has been submitted successfully. After review and approval, it can be featured on the homepage client feedback section.
         </p>
         <button
           type="button"
-          onClick={() => {
-            setSubmitted(false);
-            setErrorMessage('');
-          }}
+          onClick={() => onNavigate('home')}
           className="mt-6 inline-flex items-center gap-2 rounded-full bg-cyan-500 px-6 py-3 font-semibold text-white transition hover:bg-cyan-400"
         >
-          Submit another response
+          Return to home
         </button>
       </div>
     );
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-6 rounded-[28px] border border-white/10 bg-[#061327] p-6 md:p-8"
-    >
+    <form onSubmit={handleSubmit} className="rounded-[28px] border border-white/10 bg-[#061327] p-6 md:p-8">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-200">Full name</label>
@@ -142,6 +121,7 @@ export default function ClientFeedbackForm() {
             className="w-full rounded-2xl border border-white/10 bg-[#071224] px-4 py-3 text-white outline-none transition focus:border-cyan-400/50"
           />
         </div>
+
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-200">Company</label>
           <input
@@ -151,6 +131,7 @@ export default function ClientFeedbackForm() {
             className="w-full rounded-2xl border border-white/10 bg-[#071224] px-4 py-3 text-white outline-none transition focus:border-cyan-400/50"
           />
         </div>
+
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-200">Role</label>
           <input
@@ -160,6 +141,7 @@ export default function ClientFeedbackForm() {
             className="w-full rounded-2xl border border-white/10 bg-[#071224] px-4 py-3 text-white outline-none transition focus:border-cyan-400/50"
           />
         </div>
+
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-200">Email</label>
           <input
@@ -172,7 +154,7 @@ export default function ClientFeedbackForm() {
         </div>
       </div>
 
-      <div>
+      <div className="mt-6">
         <label className="mb-2 block text-sm font-medium text-gray-200">Rating</label>
         <select
           value={form.rating}
@@ -187,7 +169,7 @@ export default function ClientFeedbackForm() {
         </select>
       </div>
 
-      <div>
+      <div className="mt-6">
         <label className="mb-2 block text-sm font-medium text-gray-200">Feedback</label>
         <textarea
           value={form.message}
@@ -199,7 +181,7 @@ export default function ClientFeedbackForm() {
         />
       </div>
 
-      <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-[#071224] px-4 py-4 text-sm text-gray-300">
+      <label className="mt-6 flex items-start gap-3 rounded-2xl border border-white/10 bg-[#071224] px-4 py-4 text-sm text-gray-300">
         <input
           type="checkbox"
           checked={form.consent}
@@ -208,14 +190,13 @@ export default function ClientFeedbackForm() {
           required
         />
         <span>
-          I confirm that this feedback is accurate and I consent to it being reviewed for possible
-          publication on the BinaryGuard website.
+          I confirm that this feedback is accurate and I consent to it being reviewed for possible publication on the BinaryGuard website.
         </span>
       </label>
 
-      {errorMessage ? <p className="text-sm text-red-300">{errorMessage}</p> : null}
+      {errorMessage ? <p className="mt-4 text-sm text-red-300">{errorMessage}</p> : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <button
           type="submit"
           disabled={submitting}
@@ -224,6 +205,7 @@ export default function ClientFeedbackForm() {
           <Send size={16} />
           {submitting ? 'Submitting...' : 'Submit feedback'}
         </button>
+
         <button
           type="button"
           onClick={() => setForm(initialForm)}
