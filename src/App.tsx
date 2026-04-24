@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import About from './pages/About';
@@ -6,8 +6,10 @@ import Solutions from './pages/Solutions';
 import Services from './pages/Services';
 import Products from './pages/Products';
 import Contact from './pages/Contact';
+import FeedbackPage from './pages/feedback';
 
-type Page = 'home' | 'about' | 'services' | 'products' | 'contact' | 'solutions';
+type PublicPage = 'home' | 'about' | 'services' | 'products' | 'contact' | 'solutions';
+type Page = PublicPage | 'feedback';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -25,19 +27,24 @@ export default function App() {
       services: 'Services – BinaryGuard',
       products: 'Products – BinaryGuard',
       contact: 'Contact Us – BinaryGuard',
+      feedback: 'Client Feedback – BinaryGuard',
     };
+
     document.title = titles[currentPage];
   }, [currentPage]);
 
+  const navbarCurrentPage: PublicPage = currentPage === 'feedback' ? 'home' : currentPage;
+
   return (
     <div className="bg-[#030d1f]">
-      <Navbar currentPage={currentPage} onNavigate={navigate} />
+      <Navbar currentPage={navbarCurrentPage} onNavigate={navigate} />
       {currentPage === 'home' && <Home onNavigate={navigate} />}
       {currentPage === 'about' && <About onNavigate={navigate} />}
       {currentPage === 'solutions' && <Solutions onNavigate={navigate} />}
       {currentPage === 'services' && <Services onNavigate={navigate} />}
       {currentPage === 'products' && <Products onNavigate={navigate} />}
       {currentPage === 'contact' && <Contact onNavigate={navigate} />}
+      {currentPage === 'feedback' && <FeedbackPage onNavigate={navigate} />}
     </div>
   );
 }
