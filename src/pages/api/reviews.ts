@@ -1,107 +1,74 @@
-import type { Request, Response } from 'express';
-import { Pool } from 'pg';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
 
-const connectionString = process.env.DATABASE_URL;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!connectionString) {
-  throw new Error('Missing DATABASE_URL for DigitalOcean PostgreSQL.');
+function getSupabaseAdmin() {
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error('Missing Supabase API environment variables. Set NEXT_PUBLIC_SUPABASE_URL or VITE_SUPABASE_URL, and SUPABASE_SERVICE_ROLE_KEY.');
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
 }
 
-const pool = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false },
-});
-
-function normalizeRating(value: unknown): number {
-  const rating = Number(value ?? 5);
-  if (!Number.isFinite(rating)) return 5;
-  return Math.min(5, Math.max(1, Math.round(rating)));
+function cleanString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function getReviews(req: Request, res: Response) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const includeNonFeatured = req.query.featured === 'false';
-    const values: unknown[] = [true];
-    let whereClause = 'where approved = $1';
+    const supabase = getSupabaseAdmin();
 
-    if (!includeNonFeatured) {
-      values.push(true);
-      whereClause += ' and featured = $2';
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('client_reviews')
+        .select('id, name, company, role, rating, message, created_at')
+        .eq('approved', true)
+        .eq('featured', true)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json(data ?? []);
     }
 
-    const result = await pool.query(
-      `
-        select id, name, company, role, rating, message, created_at
-        from public.client_reviews
-        ${whereClause}
-        order by created_at desc
-        limit 6
-      `,
-      values
-    );
+    if (req.method === 'POST') {
+      const name = cleanString(req.body?.name);
+      const message = cleanString(req.body?.message);
+      const consent = Boolean(req.body?.consent);
+      const rating = Number(req.body?.rating) || 5;
 
-    return res.status(200).json(result.rows);
+      if (!name) return res.status(400).json({ error: 'Name is required.' });
+      if (!message) return res.status(400).json({ error: 'Feedback message is required.' });
+      if (!consent) return res.status(400).json({ error: 'Consent is required.' });
+
+      const { error } = await supabase.from('client_reviews').insert([
+        {
+          name,
+          company: cleanString(req.body?.company),
+          role: cleanString(req.body?.role),
+          email: cleanString(req.body?.email),
+          rating: Math.max(1, Math.min(5, rating)),
+          message,
+          consent,
+          approved: false,
+          featured: false,
+        },
+      ]);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ success: true });
+    }
+
+    res.setHeader('Allow', ['GET', 'POST']);
+    return res.status(405).json({ error: `Method ${req.method} not allowed.` });
   } catch (error) {
-    console.error('GET /api/reviews failed', error);
-    return res.status(500).json({ error: 'Unable to load client reviews.' });
+    const message = error instanceof Error ? error.message : 'Unexpected server error.';
+    return res.status(500).json({ error: message });
   }
-}
-
-export async function postReview(req: Request, res: Response) {
-  try {
-    const body = req.body ?? {};
-
-    const payload = {
-      name: String(body.name ?? '').trim(),
-      company: String(body.company ?? '').trim() || null,
-      role: String(body.role ?? '').trim() || null,
-      email: String(body.email ?? '').trim() || null,
-      rating: normalizeRating(body.rating),
-      message: String(body.message ?? '').trim(),
-      consent: Boolean(body.consent),
-    };
-
-    if (!payload.name || !payload.message) {
-      return res.status(400).json({ error: 'Name and feedback message are required.' });
-    }
-
-    if (!payload.consent) {
-      return res.status(400).json({ error: 'Consent is required before submitting feedback.' });
-    }
-
-    await pool.query(
-      `
-        insert into public.client_reviews
-        (name, company, role, email, rating, message, consent, approved, featured)
-        values ($1, $2, $3, $4, $5, $6, $7, false, false)
-      `,
-      [
-        payload.name,
-        payload.company,
-        payload.role,
-        payload.email,
-        payload.rating,
-        payload.message,
-        payload.consent,
-      ]
-    );
-
-    return res.status(201).json({ success: true });
-  } catch (error) {
-    console.error('POST /api/reviews failed', error);
-    return res.status(500).json({ error: 'Unable to submit feedback.' });
-  }
-}
-
-export default async function reviewsHandler(req: Request, res: Response) {
-  if (req.method === 'GET') {
-    return getReviews(req, res);
-  }
-
-  if (req.method === 'POST') {
-    return postReview(req, res);
-  }
-
-  res.setHeader('Allow', 'GET, POST');
-  return res.status(405).json({ error: 'Method not allowed' });
 }
